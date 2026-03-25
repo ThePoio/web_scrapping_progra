@@ -2,9 +2,12 @@
 Este programa tiene como finalidad extraer los simbolos de las compañias
 del S&P 500 de Wikipedia, a través de un request.
 """
+from urllib import response
+
 import requests
 from bs4 import BeautifulSoup
 import time
+import random
 
 class WikiWorker():
     def __init__(self):
@@ -23,17 +26,23 @@ class WikiWorker():
             simbolo=fila.find('td').text.strip('\n')
             yield simbolo
 
-    def obtencion_de_html_SP500(self):
+    def obtencion_de_html_SP500(self, macx_reintentos=5):
         headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'} #Metadatos para informar al servidor
-        response=requests.get(self._url,headers=headers) #(pagina,headers)
+        for intento in range(macx_reintentos):
+            try:
+                response=requests.get(self._url,headers=headers,timeout=10) #(pagina,headers)
+                response.raise_for_status()
+                yield from self.extraccion_de_simbolos(response.text)
+                return
+            except requests.RequestException as error:
+                if intento == macx_reintentos - 1:
+                    print(f'Fallo tras {macx_reintentos} intentos: {error}')
+                    return []
 
-        # Si el status code es inválido, que nos saque
-        if response.status_code!=200:
-            print('No se pudo acceder a la página')
-            print(f'Código error:{response.status_code}')
-            return []
-        
-        yield from self.extraccion_de_simbolos(response.text)
+                # Backoff exponencial con jitter para espaciar los reintentos.
+                espera=(2**intento)+random.uniform(0,1)
+                print(f'Intento {intento + 1} fallido: {error}. Reintentando en {espera:.2f}s...')
+                time.sleep(espera)
         #Vamos a llamar a extracción de simbolos
         
 # wiki=WikiWorker()

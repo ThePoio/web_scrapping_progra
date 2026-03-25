@@ -7,6 +7,7 @@ el valor correspondiente de la acción en yeahoo finance
 import requests
 from lxml import html
 import time
+import random
 import threading
 from User_agent import get_random_user_agent
 
@@ -22,11 +23,24 @@ class YahooFinancePriceWorker(threading.Thread):
         try:
             url=self._base_url+self.simbolo
             headers={'User-Agent':get_random_user_agent()}
-            time.sleep(0.1)
-            response=requests.get(url,headers=headers)
-            if response.status_code!=200:
-                print('Error de conexion. codigo: ', response.status_code)
-                return
+            max_reintentos=5
+
+            for intento in range(max_reintentos):
+                try:
+                    time.sleep(0.1)
+                    response=requests.get(url,headers=headers,timeout=10)
+                    response.raise_for_status()
+                    break
+                except requests.RequestException as error:
+                    if intento == max_reintentos - 1:
+                        print(f'Simbolo: {self.simbolo}, fallo tras {max_reintentos} intentos: {error}')
+                        return
+
+                    # Backoff exponencial con jitter para espaciar reintentos.
+                    espera=(2**intento)+random.uniform(0,1)
+                    print(f'Simbolo: {self.simbolo}, intento {intento + 1} fallido. Reintentando en {espera:.2f}s...')
+                    time.sleep(espera)
+
             contenido=html.fromstring(response.text)
             precio=contenido.xpath(self.xpath_cierre)[0].text.strip()
             print(f'{self.simbolo}: {precio}')
